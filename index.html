@@ -9610,5 +9610,21 @@ var setupCallbacks = setInterval(function() {
 }, 100);
 </script>
 
+<script>
+  // Wait for the DOM to load
+  window.addEventListener('DOMContentLoaded', (event) => {
+    document.querySelectorAll('a').forEach(link => {
+      const href = link.getAttribute('href');
+      
+      // Target external links only (starting with http or specific domain)
+      if (href && (href.startsWith('http') || href.includes('usa.mizuno.com'))) {
+        // Use _top to replace the entire window's URL with kestan.co
+        link.setAttribute('target', '_top');
+        link.setAttribute('rel', 'noopener noreferrer');
+      }
+    });
+  });
+</script>
+        
     </body>
 </html>
