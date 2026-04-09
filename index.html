@@ -9612,17 +9612,14 @@ var setupCallbacks = setInterval(function() {
 
 <script>
 (() => {
-  const REAL_HOST = 'usa.mizuno.com';
-
-  function<script>
-(() => {
   const REAL_ORIGIN = 'https://usa.mizuno.com';
+  const SCOPE_SELECTOR = null; // optionally set to '#mizuno-wrapper'
 
-  // OPTIONAL: scope to a container to avoid affecting your whole page
-  // Example: <div id="mizuno-wrapper">...</div>
-  const SCOPE_SELECTOR = null; // set to '#mizuno-wrapper' if needed
+  function getScopeRoot() {
+    return SCOPE_SELECTOR ? document.querySelector(SCOPE_SELECTOR) : document;
+  }
 
-  function shouldIgnore(href) {
+  function shouldIgnoreHref(href) {
     return (
       !href ||
       href.startsWith('#') ||
@@ -9633,21 +9630,21 @@ var setupCallbacks = setInterval(function() {
     );
   }
 
-  function isMizunoLink(href) {
-    if (!href) return false;
+  function isHandledLink(href) {
+    if (shouldIgnoreHref(href)) return false;
 
-    // Root-relative → treat as Mizuno
+    // Root-relative links like /sport/ should go to Mizuno
     if (href.startsWith('/')) return true;
 
     try {
-      const url = new URL(href, window.location.href);
+      const url = new URL(href, REAL_ORIGIN);
       return url.hostname === 'usa.mizuno.com';
     } catch {
       return false;
     }
   }
 
-  function toAbsolute(href) {
+  function toAbsoluteMizunoUrl(href) {
     try {
       return new URL(href, REAL_ORIGIN).href;
     } catch {
@@ -9655,98 +9652,58 @@ var setupCallbacks = setInterval(function() {
     }
   }
 
-  function shouldHandle(link) {
-    const href = link.getAttribute('href');
-    if (shouldIgnore(href)) return false;
-
-    // Only handle Mizuno links
-    return isMizunoLink(href);
-  }
-
   function patchLink(link) {
-    if (!shouldHandle(link)) return;
+    if (!(link instanceof HTMLAnchorElement)) return;
 
-    const href = link.getAttribute('href');
-    const absolute = toAbsolute(href);
-    if (!absolute) return;
+    const rawHref = link.getAttribute('href');
+    if (!isHandledLink(rawHref)) return;
 
-    link.setAttribute('href', absolute);
+    const absoluteUrl = toAbsoluteMizunoUrl(rawHref);
+    if (!absoluteUrl) return;
+
+    link.setAttribute('href', absoluteUrl);
     link.setAttribute('target', '_top');
     link.setAttribute('rel', 'noopener noreferrer');
   }
 
-  function patchAll(root) {
+  function patchAllLinks(root) {
     root.querySelectorAll('a[href]').forEach(patchLink);
   }
 
-  function inScope(link) {
-    if (!SCOPE_SELECTOR) return true;
-    return link.closest(SCOPE_SELECTOR);
-  }
-
-  function handleClick(e) {
-    const link = e.target.closest && e.target.closest('a[href]');
-    if (!link) return;
-
-    if (!inScope(link)) return;
-    if (!shouldHandle(link)) return;
-
-    // Respect user intent (new tab, etc.)
-    if (
-      e.defaultPrevented ||
-      e.button !== 0 ||
-      e.metaKey ||
-      e.ctrlKey ||
-      e.shiftKey ||
-      e.altKey
-    ) {
-      return;
-    }
-
-    const href = link.getAttribute('href');
-    const absolute = toAbsolute(href);
-    if (!absolute) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation?.();
-
-    window.top.location.assign(absolute);
-  }
-
   function init() {
-    const root = SCOPE_SELECTOR
-      ? document.querySelector(SCOPE_SELECTOR)
-      : document;
-
+    const root = getScopeRoot();
     if (!root) return;
 
-    patchAll(root);
+    patchAllLinks(root);
 
-    // Watch for dynamically added links
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
           if (node.nodeType !== 1) continue;
 
-          if (node.matches?.('a[href]')) {
+          if (node.matches && node.matches('a[href]')) {
             patchLink(node);
           } else if (node.querySelectorAll) {
-            patchAll(node);
+            patchAllLinks(node);
           }
+        }
+
+        if (
+          mutation.type === 'attributes' &&
+          mutation.target instanceof HTMLAnchorElement &&
+          mutation.attributeName === 'href'
+        ) {
+          patchLink(mutation.target);
         }
       }
     });
 
-    observer.observe(root, {
+    observer.observe(root === document ? document.documentElement : root, {
       childList: true,
       subtree: true,
       attributes: true,
       attributeFilter: ['href']
     });
-
-    // Capture phase = beat site JS (critical for megamenus)
-    document.addEventListener('click', handleClick, true);
   }
 
   if (document.readyState === 'loading') {
