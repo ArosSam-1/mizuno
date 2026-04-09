@@ -9611,50 +9611,78 @@ var setupCallbacks = setInterval(function() {
 </script>
 
 <script>
-  window.addEventListener('DOMContentLoaded', () => {
-    // The target domain identified from your source code
-    const MIZUNO_BASE = "usa.mizuno.com";
-    const currentProtocol = window.location.protocol;
+(() => {
+  const REAL_ORIGIN = 'https://usa.mizuno.com';
 
-    document.querySelectorAll('a').forEach(link => {
-      let href = link.getAttribute('href');
-      if (!href) return;
+  function normalizeMizunoLink(link) {
+    const rawHref = link.getAttribute('href');
+    if (!rawHref) return;
 
-      // 1. Identify if it's a Mizuno link or a relative path intended for Mizuno
-      const isMizunoAbsolute = href.includes('mizuno.com') || href.includes('mizunousa.com');
-      const isRelativePath = href.startsWith('/') && !href.startsWith('//');
+    const href = rawHref.trim();
 
-      if (isMizunoAbsolute || isRelativePath) {
-        
-        // 2. Fix Relative Paths (Crucial for GitHub Pages)
-        // If the link is "/volleyball", it becomes "https://usa.mizuno.com/volleyball"
-        if (isRelativePath) {
-          href = currentProtocol + '//' + MIZUNO_BASE + href;
-        }
+    // Ignore anchors, javascript, mailto, tel
+    if (
+      href.startsWith('#') ||
+      href.startsWith('javascript:') ||
+      href.startsWith('mailto:') ||
+      href.startsWith('tel:')
+    ) {
+      return;
+    }
 
-        try {
-          // 3. Dynamic Protocol Alignment
-          // Ensures any http:// link becomes https:// to match GitHub's security
-          let urlObj = new URL(href.startsWith('http') ? href : currentProtocol + '//' + href.replace(/^\/+/, ''));
-          
-          if (urlObj.protocol !== currentProtocol) {
-            urlObj.protocol = currentProtocol;
-          }
+    // Case 1: root-relative Mizuno link like /running/
+    if (href.startsWith('/')) {
+      link.href = REAL_ORIGIN + href;
+      link.target = '_top';
+      link.rel = 'noopener noreferrer';
+      return;
+    }
 
-          link.href = urlObj.toString();
+    // Case 2: already points to usa.mizuno.com
+    try {
+      const url = new URL(href, window.location.href);
 
-          // 4. Force "Breakout" to prevent "Refused to Connect"
-          // Mizuno's server rejects being displayed inside GitHub's preview frames.
-          // _top forces the browser to leave your GitHub page and go to Mizuno fully.
-          link.setAttribute('target', '_top');
-          link.setAttribute('rel', 'noopener noreferrer');
-
-        } catch (e) {
-          console.warn("Mizuno Script: Could not parse URL", href);
-        }
+      if (url.hostname === 'usa.mizuno.com') {
+        link.href = url.href;
+        link.target = '_top';
+        link.rel = 'noopener noreferrer';
       }
-    });
+    } catch (e) {
+      // Ignore malformed URLs
+    }
+  }
+
+  function processAllLinks(root = document) {
+    root.querySelectorAll('a[href]').forEach(normalizeMizunoLink);
+  }
+
+  // Initial pass
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => processAllLinks());
+  } else {
+    processAllLinks();
+  }
+
+  // Catch links inserted later by JS
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      mutation.addedNodes.forEach(node => {
+        if (node.nodeType !== 1) return;
+
+        if (node.matches?.('a[href]')) {
+          normalizeMizunoLink(node);
+        } else if (node.querySelectorAll) {
+          processAllLinks(node);
+        }
+      });
+    }
   });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+})();
 </script>
         
     </body>
