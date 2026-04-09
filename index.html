@@ -9614,82 +9614,84 @@ var setupCallbacks = setInterval(function() {
 (() => {
   const REAL_HOST = 'usa.mizuno.com';
 
-  function getMizunoUrl(link) {
-    const rawHref = link.getAttribute('href');
-    if (!rawHref) return null;
+  function<script>
+(() => {
+  const REAL_ORIGIN = 'https://usa.mizuno.com';
 
-    const href = rawHref.trim();
-    if (
+  // OPTIONAL: scope to a container to avoid affecting your whole page
+  // Example: <div id="mizuno-wrapper">...</div>
+  const SCOPE_SELECTOR = null; // set to '#mizuno-wrapper' if needed
+
+  function shouldIgnore(href) {
+    return (
       !href ||
       href.startsWith('#') ||
       href.startsWith('javascript:') ||
       href.startsWith('mailto:') ||
-      href.startsWith('tel:')
-    ) {
-      return null;
-    }
+      href.startsWith('tel:') ||
+      href.startsWith('data:')
+    );
+  }
+
+  function isMizunoLink(href) {
+    if (!href) return false;
+
+    // Root-relative → treat as Mizuno
+    if (href.startsWith('/')) return true;
 
     try {
-      const url = new URL(href, 'https://usa.mizuno.com');
+      const url = new URL(href, window.location.href);
+      return url.hostname === 'usa.mizuno.com';
+    } catch {
+      return false;
+    }
+  }
 
-      // Root-relative links become real Mizuno URLs automatically
-      if (url.hostname === REAL_HOST) {
-        return url.href;
-      }
-    } catch (err) {}
+  function toAbsolute(href) {
+    try {
+      return new URL(href, REAL_ORIGIN).href;
+    } catch {
+      return null;
+    }
+  }
 
-    return null;
+  function shouldHandle(link) {
+    const href = link.getAttribute('href');
+    if (shouldIgnore(href)) return false;
+
+    // Only handle Mizuno links
+    return isMizunoLink(href);
   }
 
   function patchLink(link) {
-    const fixedUrl = getMizunoUrl(link);
-    if (!fixedUrl) return;
+    if (!shouldHandle(link)) return;
 
-    link.setAttribute('href', fixedUrl);
+    const href = link.getAttribute('href');
+    const absolute = toAbsolute(href);
+    if (!absolute) return;
+
+    link.setAttribute('href', absolute);
     link.setAttribute('target', '_top');
     link.setAttribute('rel', 'noopener noreferrer');
   }
 
-  function patchAll(root = document) {
+  function patchAll(root) {
     root.querySelectorAll('a[href]').forEach(patchLink);
   }
 
-  // Initial patch
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => patchAll());
-  } else {
-    patchAll();
+  function inScope(link) {
+    if (!SCOPE_SELECTOR) return true;
+    return link.closest(SCOPE_SELECTOR);
   }
 
-  // Patch dynamically added links too
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType !== 1) continue;
-
-        if (node.matches?.('a[href]')) {
-          patchLink(node);
-        } else if (node.querySelectorAll) {
-          patchAll(node);
-        }
-      }
-    }
-  });
-
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true
-  });
-
-  // Force navigation before menu JS can hijack the click
-  document.addEventListener('click', (e) => {
-    const link = e.target.closest('a[href]');
+  function handleClick(e) {
+    const link = e.target.closest && e.target.closest('a[href]');
     if (!link) return;
 
-    const fixedUrl = getMizunoUrl(link);
-    if (!fixedUrl) return;
+    if (!inScope(link)) return;
+    if (!shouldHandle(link)) return;
 
-    // Let modified clicks behave normally
+    // Respect user intent (new tab, etc.)
     if (
       e.defaultPrevented ||
       e.button !== 0 ||
@@ -9701,12 +9703,57 @@ var setupCallbacks = setInterval(function() {
       return;
     }
 
+    const href = link.getAttribute('href');
+    const absolute = toAbsolute(href);
+    if (!absolute) return;
+
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation?.();
 
-    window.top.location.assign(fixedUrl);
-  }, true);
+    window.top.location.assign(absolute);
+  }
+
+  function init() {
+    const root = SCOPE_SELECTOR
+      ? document.querySelector(SCOPE_SELECTOR)
+      : document;
+
+    if (!root) return;
+
+    patchAll(root);
+
+    // Watch for dynamically added links
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== 1) continue;
+
+          if (node.matches?.('a[href]')) {
+            patchLink(node);
+          } else if (node.querySelectorAll) {
+            patchAll(node);
+          }
+        }
+      }
+    });
+
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['href']
+    });
+
+    // Capture phase = beat site JS (critical for megamenus)
+    document.addEventListener('click', handleClick, true);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();
 </script>
     </body>
