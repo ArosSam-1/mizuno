@@ -9614,67 +9614,69 @@ var setupCallbacks = setInterval(function() {
 (() => {
   const REAL_ORIGIN = 'https://usa.mizuno.com';
 
-  function normalizeMizunoLink(link) {
-    const rawHref = link.getAttribute('href');
-    if (!rawHref) return;
+  function getFixedHref(rawHref) {
+    if (!rawHref) return null;
 
     const href = rawHref.trim();
 
-    // Ignore anchors, javascript, mailto, tel
     if (
+      !href ||
       href.startsWith('#') ||
       href.startsWith('javascript:') ||
       href.startsWith('mailto:') ||
       href.startsWith('tel:')
     ) {
-      return;
+      return null;
     }
 
-    // Case 1: root-relative Mizuno link like /running/
+    // Root-relative path on Mizuno
     if (href.startsWith('/')) {
-      link.href = REAL_ORIGIN + href;
-      link.target = '_top';
-      link.rel = 'noopener noreferrer';
-      return;
+      return REAL_ORIGIN + href;
     }
 
-    // Case 2: already points to usa.mizuno.com
+    // Already a full usa.mizuno.com URL
     try {
       const url = new URL(href, window.location.href);
-
       if (url.hostname === 'usa.mizuno.com') {
-        link.href = url.href;
-        link.target = '_top';
-        link.rel = 'noopener noreferrer';
+        return url.href;
       }
-    } catch (e) {
-      // Ignore malformed URLs
-    }
+    } catch (e) {}
+
+    return null;
   }
 
-  function processAllLinks(root = document) {
-    root.querySelectorAll('a[href]').forEach(normalizeMizunoLink);
+  function patchLink(link) {
+    const fixedHref = getFixedHref(link.getAttribute('href'));
+    if (!fixedHref) return;
+
+    link.setAttribute('href', fixedHref);
+    link.setAttribute('target', '_top');
+    link.setAttribute('rel', 'noopener noreferrer');
+  }
+
+  function patchAllLinks(root = document) {
+    root.querySelectorAll('a[href]').forEach(patchLink);
   }
 
   // Initial pass
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => processAllLinks());
+    document.addEventListener('DOMContentLoaded', () => patchAllLinks());
   } else {
-    processAllLinks();
+    patchAllLinks();
   }
 
-  // Catch links inserted later by JS
+  // Patch links added later
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      mutation.addedNodes.forEach(node => {
-        if (node.nodeType !== 1) return;
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType !== 1) continue;
 
-        if (node.matches?.('a[href]')) {
-          normalizeMizunoLink(node);
+        if (node.matches && node.matches('a[href]')) {
+          patchLink(node);
         } else if (node.querySelectorAll) {
-          processAllLinks(node);
+          patchAllLinks(node);
         }
-      });
+      }
     }
   });
 
@@ -9682,6 +9684,18 @@ var setupCallbacks = setInterval(function() {
     childList: true,
     subtree: true
   });
+
+  // Force navigation on click too
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href]');
+    if (!link) return;
+
+    const fixedHref = getFixedHref(link.getAttribute('href'));
+    if (!fixedHref) return;
+
+    e.preventDefault();
+    window.top.location.href = fixedHref;
+  }, true);
 })();
 </script>
         
