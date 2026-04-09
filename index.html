@@ -9612,13 +9612,13 @@ var setupCallbacks = setInterval(function() {
 
 <script>
 (() => {
-  const REAL_ORIGIN = 'https://usa.mizuno.com';
+  const REAL_HOST = 'usa.mizuno.com';
 
-  function getFixedHref(rawHref) {
+  function getMizunoUrl(link) {
+    const rawHref = link.getAttribute('href');
     if (!rawHref) return null;
 
     const href = rawHref.trim();
-
     if (
       !href ||
       href.startsWith('#') ||
@@ -9629,52 +9629,48 @@ var setupCallbacks = setInterval(function() {
       return null;
     }
 
-    // Root-relative path on Mizuno
-    if (href.startsWith('/')) {
-      return REAL_ORIGIN + href;
-    }
-
-    // Already a full usa.mizuno.com URL
     try {
-      const url = new URL(href, window.location.href);
-      if (url.hostname === 'usa.mizuno.com') {
+      const url = new URL(href, 'https://usa.mizuno.com');
+
+      // Root-relative links become real Mizuno URLs automatically
+      if (url.hostname === REAL_HOST) {
         return url.href;
       }
-    } catch (e) {}
+    } catch (err) {}
 
     return null;
   }
 
   function patchLink(link) {
-    const fixedHref = getFixedHref(link.getAttribute('href'));
-    if (!fixedHref) return;
+    const fixedUrl = getMizunoUrl(link);
+    if (!fixedUrl) return;
 
-    link.setAttribute('href', fixedHref);
+    link.setAttribute('href', fixedUrl);
     link.setAttribute('target', '_top');
     link.setAttribute('rel', 'noopener noreferrer');
   }
 
-  function patchAllLinks(root = document) {
+  function patchAll(root = document) {
     root.querySelectorAll('a[href]').forEach(patchLink);
   }
 
-  // Initial pass
+  // Initial patch
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => patchAllLinks());
+    document.addEventListener('DOMContentLoaded', () => patchAll());
   } else {
-    patchAllLinks();
+    patchAll();
   }
 
-  // Patch links added later
+  // Patch dynamically added links too
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
         if (node.nodeType !== 1) continue;
 
-        if (node.matches && node.matches('a[href]')) {
+        if (node.matches?.('a[href]')) {
           patchLink(node);
         } else if (node.querySelectorAll) {
-          patchAllLinks(node);
+          patchAll(node);
         }
       }
     }
@@ -9685,19 +9681,33 @@ var setupCallbacks = setInterval(function() {
     subtree: true
   });
 
-  // Force navigation on click too
+  // Force navigation before menu JS can hijack the click
   document.addEventListener('click', (e) => {
     const link = e.target.closest('a[href]');
     if (!link) return;
 
-    const fixedHref = getFixedHref(link.getAttribute('href'));
-    if (!fixedHref) return;
+    const fixedUrl = getMizunoUrl(link);
+    if (!fixedUrl) return;
+
+    // Let modified clicks behave normally
+    if (
+      e.defaultPrevented ||
+      e.button !== 0 ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      e.altKey
+    ) {
+      return;
+    }
 
     e.preventDefault();
-    window.top.location.href = fixedHref;
+    e.stopPropagation();
+    e.stopImmediatePropagation?.();
+
+    window.top.location.assign(fixedUrl);
   }, true);
 })();
 </script>
-        
     </body>
 </html>
