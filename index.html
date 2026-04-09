@@ -9616,10 +9616,15 @@ var setupCallbacks = setInterval(function() {
     document.querySelectorAll('a').forEach(link => {
       const href = link.getAttribute('href');
       
-      // Target external links only (starting with http or specific domain)
-      if (href && (href.startsWith('http') || href.includes('mizuno.com'))) {
-        // Use _top to replace the entire window's URL with kestan.co
+      // Check if the link exists and points to the Mizuno US domain
+      // This covers https://usa.mizuno.com, http://usa.mizuno.com, etc.
+      if (href && href.includes('usa.mizuno.com')) {
+        
+        // _top ensures the link opens in the full body of the window
+        // (Useful if your GitHub Page is being viewed in an iframe)
         link.setAttribute('target', '_top');
+        
+        // Security best practice for cross-origin links
         link.setAttribute('rel', 'noopener noreferrer');
       }
     });
