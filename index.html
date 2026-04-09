@@ -9611,21 +9611,28 @@ var setupCallbacks = setInterval(function() {
 </script>
 
 <script>
-  // Wait for the DOM to load
   window.addEventListener('DOMContentLoaded', (event) => {
+    // 1. Select all links on the page
     document.querySelectorAll('a').forEach(link => {
-      const href = link.getAttribute('href');
-      
-      // Check if the link exists and points to the Mizuno US domain
-      // This covers https://usa.mizuno.com, http://usa.mizuno.com, etc.
-      if (href && href.includes('usa.mizuno.com')) {
-        
-        // _top ensures the link opens in the full body of the window
-        // (Useful if your GitHub Page is being viewed in an iframe)
-        link.setAttribute('target', '_top');
-        
-        // Security best practice for cross-origin links
-        link.setAttribute('rel', 'noopener noreferrer');
+      let href = link.getAttribute('href');
+
+      if (href) {
+        // 2. Check if the link is meant for Mizuno
+        if (href.includes('mizuno.com') || href.includes('mizunousa.com')) {
+          
+          // 3. Ensure the URL starts with HTTPS to prevent "Refused to connect"
+          if (!href.startsWith('http')) {
+             href = 'https://' + href.replace(/^\/+/, ''); // Clean leading slashes
+             link.setAttribute('href', href);
+          }
+
+          // 4. Force 'target="_top"' to break out of any GitHub/Preview frames
+          // This is critical to avoid Mizuno's CSP security blocks
+          link.setAttribute('target', '_top');
+          
+          // 5. Security best practices
+          link.setAttribute('rel', 'noopener noreferrer');
+        }
       }
     });
   });
