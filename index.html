@@ -9611,27 +9611,46 @@ var setupCallbacks = setInterval(function() {
 </script>
 
 <script>
-  window.addEventListener('DOMContentLoaded', (event) => {
-    // 1. Select all links on the page
+  window.addEventListener('DOMContentLoaded', () => {
+    // The target domain identified from your source code
+    const MIZUNO_BASE = "usa.mizuno.com";
+    const currentProtocol = window.location.protocol;
+
     document.querySelectorAll('a').forEach(link => {
       let href = link.getAttribute('href');
+      if (!href) return;
 
-      if (href) {
-        // 2. Check if the link is meant for Mizuno
-        if (href.includes('mizuno.com') || href.includes('mizunousa.com')) {
+      // 1. Identify if it's a Mizuno link or a relative path intended for Mizuno
+      const isMizunoAbsolute = href.includes('mizuno.com') || href.includes('mizunousa.com');
+      const isRelativePath = href.startsWith('/') && !href.startsWith('//');
+
+      if (isMizunoAbsolute || isRelativePath) {
+        
+        // 2. Fix Relative Paths (Crucial for GitHub Pages)
+        // If the link is "/volleyball", it becomes "https://usa.mizuno.com/volleyball"
+        if (isRelativePath) {
+          href = currentProtocol + '//' + MIZUNO_BASE + href;
+        }
+
+        try {
+          // 3. Dynamic Protocol Alignment
+          // Ensures any http:// link becomes https:// to match GitHub's security
+          let urlObj = new URL(href.startsWith('http') ? href : currentProtocol + '//' + href.replace(/^\/+/, ''));
           
-          // 3. Ensure the URL starts with HTTPS to prevent "Refused to connect"
-          if (!href.startsWith('http')) {
-             href = 'https://' + href.replace(/^\/+/, ''); // Clean leading slashes
-             link.setAttribute('href', href);
+          if (urlObj.protocol !== currentProtocol) {
+            urlObj.protocol = currentProtocol;
           }
 
-          // 4. Force 'target="_top"' to break out of any GitHub/Preview frames
-          // This is critical to avoid Mizuno's CSP security blocks
+          link.href = urlObj.toString();
+
+          // 4. Force "Breakout" to prevent "Refused to Connect"
+          // Mizuno's server rejects being displayed inside GitHub's preview frames.
+          // _top forces the browser to leave your GitHub page and go to Mizuno fully.
           link.setAttribute('target', '_top');
-          
-          // 5. Security best practices
           link.setAttribute('rel', 'noopener noreferrer');
+
+        } catch (e) {
+          console.warn("Mizuno Script: Could not parse URL", href);
         }
       }
     });
