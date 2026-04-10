@@ -9613,104 +9613,89 @@ var setupCallbacks = setInterval(function() {
 <script>
 (() => {
   const REAL_ORIGIN = 'https://usa.mizuno.com';
-  const SCOPE_SELECTOR = null; // optionally set to '#mizuno-wrapper'
 
-  function getScopeRoot() {
-    return SCOPE_SELECTOR ? document.querySelector(SCOPE_SELECTOR) : document;
-  }
+  function getFixedHref(rawHref) {
+    if (!rawHref) return null;
 
-  function shouldIgnoreHref(href) {
-    return (
+    const href = rawHref.trim();
+
+    if (
       !href ||
       href.startsWith('#') ||
       href.startsWith('javascript:') ||
       href.startsWith('mailto:') ||
-      href.startsWith('tel:') ||
-      href.startsWith('data:')
-    );
-  }
-
-  function isHandledLink(href) {
-    if (shouldIgnoreHref(href)) return false;
-
-    // Root-relative links like /sport/ should go to Mizuno
-    if (href.startsWith('/')) return true;
-
-    try {
-      const url = new URL(href, REAL_ORIGIN);
-      return url.hostname === 'usa.mizuno.com';
-    } catch {
-      return false;
-    }
-  }
-
-  function toAbsoluteMizunoUrl(href) {
-    try {
-      return new URL(href, REAL_ORIGIN).href;
-    } catch {
+      href.startsWith('tel:')
+    ) {
       return null;
     }
+
+    // Root-relative path on Mizuno
+    if (href.startsWith('/')) {
+      return REAL_ORIGIN + href;
+    }
+
+    // Already a full usa.mizuno.com URL
+    try {
+      const url = new URL(href, window.location.href);
+      if (url.hostname === 'usa.mizuno.com') {
+        return url.href;
+      }
+    } catch (e) {}
+
+    return null;
   }
 
   function patchLink(link) {
-    if (!(link instanceof HTMLAnchorElement)) return;
+    const fixedHref = getFixedHref(link.getAttribute('href'));
+    if (!fixedHref) return;
 
-    const rawHref = link.getAttribute('href');
-    if (!isHandledLink(rawHref)) return;
-
-    const absoluteUrl = toAbsoluteMizunoUrl(rawHref);
-    if (!absoluteUrl) return;
-
-    link.setAttribute('href', absoluteUrl);
+    link.setAttribute('href', fixedHref);
     link.setAttribute('target', '_top');
     link.setAttribute('rel', 'noopener noreferrer');
   }
 
-  function patchAllLinks(root) {
+  function patchAllLinks(root = document) {
     root.querySelectorAll('a[href]').forEach(patchLink);
   }
 
-  function init() {
-    const root = getScopeRoot();
-    if (!root) return;
+  // Initial pass
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => patchAllLinks());
+  } else {
+    patchAllLinks();
+  }
 
-    patchAllLinks(root);
+  // Patch links added later
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType !== 1) continue;
 
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType !== 1) continue;
-
-          if (node.matches && node.matches('a[href]')) {
-            patchLink(node);
-          } else if (node.querySelectorAll) {
-            patchAllLinks(node);
-          }
-        }
-
-        if (
-          mutation.type === 'attributes' &&
-          mutation.target instanceof HTMLAnchorElement &&
-          mutation.attributeName === 'href'
-        ) {
-          patchLink(mutation.target);
+        if (node.matches && node.matches('a[href]')) {
+          patchLink(node);
+        } else if (node.querySelectorAll) {
+          patchAllLinks(node);
         }
       }
-    });
+    }
+  });
 
-    observer.observe(root === document ? document.documentElement : root, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['href']
-    });
-  }
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  // Force navigation on click too
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href]');
+    if (!link) return;
+
+    const fixedHref = getFixedHref(link.getAttribute('href'));
+    if (!fixedHref) return;
+
+    e.preventDefault();
+    window.top.location.href = fixedHref;
+  }, true);
 })();
 </script>
     </body>
