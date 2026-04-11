@@ -237,7 +237,7 @@ export default function MicrocastWidgetRewrite({
   }
 
   return (
-    <div className="min-h-screen bg-white p-3 sm:p-6">
+    <div className="bg-white p-3 sm:p-6">
       <div className="mx-auto max-w-[540px] border border-[#cfd4da] bg-[#f3f3f3] p-4 sm:p-5">
         <div className="flex flex-col gap-2.5">
           {config.suggestedPrompts.map((prompt) => (
