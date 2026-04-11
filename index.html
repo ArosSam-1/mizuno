@@ -8794,10 +8794,7 @@ window.addEventListener('load', () => {
     
 
     <div class="container">
-        
-
-
-
+            <div id="mizuno-product-assistant"></div>
     </div>
     <div id="modal" class="modal" data-reveal data-prevent-quick-search-close>
     <button class="modal-close"
@@ -9699,5 +9696,249 @@ var setupCallbacks = setInterval(function() {
 })();
 </script>
         
+
+    <!-- ===== Mizuno Product Assistant Widget ===== -->
+    <!-- React 18 + ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel standalone (JSX transpilation in-browser) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tailwind CSS (play CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- framer-motion UMD -->
+    <script src="https://unpkg.com/framer-motion@11/dist/framer-motion.js"></script>
+    <!-- lucide-react UMD -->
+    <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide-react.js"></script>
+
+    <script type="text/babel" data-presets="react,typescript">
+    (function () {
+      const { useState, useEffect, useMemo, useRef } = React;
+      const { AnimatePresence, motion } = window.Motion || window.FramerMotion || {};
+      const { Sparkles, Send } = window.LucideReact || {};
+
+      const DEFAULT_CONFIG = {
+        title: "Mizuno Product",
+        welcomeMessage: undefined,
+        suggestedPrompts: [
+          "Is this shoe breathable?",
+          "Does this shoe help with stability?",
+          "Is this shoe good for volleyball?",
+          "How does this shoe fit?",
+          "What kind of cushioning does this shoe use?",
+        ],
+      };
+
+      function createId() {
+        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+          return crypto.randomUUID();
+        }
+        return "msg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+      }
+
+      function createMessage(role, text, id) {
+        return { id: id != null ? id : createId(), role, text };
+      }
+
+      function getInitialMessages(config) {
+        return config.welcomeMessage
+          ? [createMessage("assistant", config.welcomeMessage, "welcome")]
+          : [];
+      }
+
+      function easeOutExpo(t) {
+        return t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+      }
+
+      function scrollToBottomSmooth(element, duration) {
+        duration = duration || 650;
+        const start = element.scrollTop;
+        const target = Math.max(0, element.scrollHeight - element.clientHeight);
+        const distance = target - start;
+        if (distance <= 1) return function () {};
+        const startedAt = performance.now();
+        let rafId = 0;
+        const frame = function (now) {
+          const progress = Math.min((now - startedAt) / duration, 1);
+          const next = start + distance * easeOutExpo(progress);
+          element.scrollTop = Math.min(target, next);
+          if (progress < 1 && element.scrollTop < target) {
+            rafId = requestAnimationFrame(frame);
+          }
+        };
+        rafId = requestAnimationFrame(frame);
+        return function () { cancelAnimationFrame(rafId); };
+      }
+
+      async function defaultAsk(question) {
+        const BASE_URL = "https://delightful-horse-c3836b.netlify.app";
+        const res = await fetch(BASE_URL + "/.netlify/functions/product-ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            productUrl: typeof window !== "undefined" ? window.location.href : undefined,
+            extraUrls: ["https://usa.mizuno.com/"],
+          }),
+        });
+        let data = null;
+        try { data = await res.json(); } catch (e) { data = null; }
+        if (!res.ok) throw new Error((data && data.error) || ("Request failed with status " + res.status));
+        return (data && data.answer) || "Sorry, I could not generate an answer.";
+      }
+
+      function LoadingDots() {
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18 }}
+            className="flex justify-start"
+          >
+            <div className="flex items-center justify-center gap-1.5 border border-[#d6dbe1] bg-white px-3 py-2 shadow-[0_1px_0_rgba(255,255,255,0.65)]">
+              {[0, 0.12, 0.24].map((delay, i) => (
+                <motion.span
+                  key={i}
+                  className="h-1.5 w-1.5 rounded-full bg-[#9aa8b2]"
+                  animate={{ opacity: [0.3, 1, 0.3], y: [0, -1.5, 0] }}
+                  transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut", delay }}
+                />
+              ))}
+            </div>
+          </motion.div>
+        );
+      }
+
+      function PromptButton({ text, onClick }) {
+        return (
+          <button
+            type="button"
+            onClick={onClick}
+            className="flex w-fit max-w-full items-start gap-3 border border-[#cfd4da] bg-[#f7f7f7] px-4 py-3 text-left text-[15px] leading-[1.35] text-[#6b7280] transition hover:bg-white"
+          >
+            {Sparkles && (
+              <Sparkles className="mt-[1px] h-3.5 w-3.5 shrink-0 text-[#5f7f92]" fill="currentColor" />
+            )}
+            <span className="whitespace-normal break-words">{text}</span>
+          </button>
+        );
+      }
+
+      function MessageBubble({ message }) {
+        const isUser = message.role === "user";
+        return (
+          <motion.div
+            initial={{ opacity: 0, x: isUser ? 16 : -16, y: 8 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.24, ease: "easeOut" }}
+            className={isUser ? "flex justify-end" : "flex justify-start"}
+          >
+            <div
+              className={
+                isUser
+                  ? "max-w-[85%] whitespace-pre-line bg-[#dfe6eb] px-3 py-2 text-sm leading-6 text-[#374151]"
+                  : "max-w-[85%] whitespace-pre-line border border-[#d6dbe1] bg-white px-3 py-2 text-sm leading-6 text-[#4b5563] shadow-[0_1px_0_rgba(255,255,255,0.65)]"
+              }
+            >
+              {message.text}
+            </div>
+          </motion.div>
+        );
+      }
+
+      function MicrocastWidget({ config, onAsk }) {
+        config = config || DEFAULT_CONFIG;
+        onAsk = onAsk || defaultAsk;
+        const [input, setInput] = useState("");
+        const [loading, setLoading] = useState(false);
+        const [messages, setMessages] = useState(function () { return getInitialMessages(config); });
+        const scrollRef = useRef(null);
+
+        useEffect(function () { setMessages(getInitialMessages(config)); }, [config]);
+
+        useEffect(function () {
+          const el = scrollRef.current;
+          if (!el) return;
+          let cleanup = function () {};
+          const rafId = requestAnimationFrame(function () { cleanup = scrollToBottomSmooth(el, 700); });
+          return function () { cancelAnimationFrame(rafId); cleanup(); };
+        }, [messages.length, loading]);
+
+        const canSend = useMemo(function () { return input.trim().length > 0 && !loading; }, [input, loading]);
+
+        async function ask(question) {
+          const trimmed = question.trim();
+          if (!trimmed || loading) return;
+          setMessages(function (prev) { return [...prev, createMessage("user", trimmed)]; });
+          setInput("");
+          setLoading(true);
+          try {
+            const answer = await onAsk(trimmed);
+            setMessages(function (prev) { return [...prev, createMessage("assistant", answer)]; });
+          } catch (error) {
+            console.error("Widget request failed:", error);
+            setMessages(function (prev) {
+              return [...prev, createMessage("assistant", "Sorry, something went wrong while generating an answer.")];
+            });
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        return (
+          <div className="bg-white p-3 sm:p-6">
+            <div className="mx-auto max-w-[540px] border border-[#cfd4da] bg-[#f3f3f3] p-4 sm:p-5">
+              <div className="flex flex-col gap-2.5">
+                {config.suggestedPrompts.map(function (prompt) {
+                  return <PromptButton key={prompt} text={prompt} onClick={function () { ask(prompt); }} />;
+                })}
+              </div>
+
+              <div ref={scrollRef} className="mt-4 max-h-[240px] overflow-y-auto pr-1">
+                <div className="space-y-2 pb-1">
+                  <AnimatePresence initial={false}>
+                    {messages.map(function (message) {
+                      return <MessageBubble key={message.id} message={message} />;
+                    })}
+                    {loading ? <LoadingDots key="loading-dots" /> : null}
+                  </AnimatePresence>
+                </div>
+              </div>
+
+              <form
+                onSubmit={function (e) { e.preventDefault(); if (canSend) ask(input); }}
+                className="mt-4 flex items-stretch gap-2"
+              >
+                <input
+                  value={input}
+                  onChange={function (e) { setInput(e.target.value); }}
+                  placeholder="ask a question about this Mizuno product..."
+                  disabled={loading}
+                  className="h-[42px] flex-1 border border-[#c5ccd3] bg-[#f3f3f3] px-4 text-[15px] text-[#6b7280] outline-none placeholder:text-[#98a1ab] focus:bg-white disabled:cursor-not-allowed disabled:opacity-70"
+                />
+                <button
+                  type="submit"
+                  disabled={!canSend}
+                  aria-label="Send question"
+                  className="flex h-[42px] w-[42px] items-center justify-center border border-[#c5ccd3] bg-white text-[#5f7f92] transition hover:bg-[#eef2f5] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {Send && <Send className="h-4 w-4" />}
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
+      const container = document.getElementById("mizuno-product-assistant");
+      if (container) {
+        const root = ReactDOM.createRoot(container);
+        root.render(<MicrocastWidget />);
+      }
+    })();
+    </script>
+    <!-- ===== End Mizuno Product Assistant Widget ===== -->
+
     </body>
 </html>
